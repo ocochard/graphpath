@@ -1,0 +1,414 @@
+#!/bin/sh
+#
+# Graphpath generates an ASCII network diagram from the route table of a Unix/Linux
+# https://bsdrp.net
+#
+# Copyright (c) 2018, Olivier Cochard-Labbé (olivier@cochard.me)
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+# OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+# HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+# OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+# SUCH DAMAGE.
+
+
+########################################################
+#           ## Concept documentation ##
+#
+# From this host ('me'), there are mainly 2 main families diagrams:
+#
+# - The first model family, when source and destination are towards differents
+#   interfaces:
+#
+# +-----+   +-----+    +-----+    +-----+
+# | src |   | src |    | src |    | src |
+# +-----+   +-----+    +-----+    +-----+
+#    |         |          |          |
+# +----+  +--------+  +--------+   +----+
+# | me |  | router |  | router |   | me |
+# +----+  +--------+  +--------+   +----+
+#    |        |           |          |
+# +-----+   +----+      +----+   +--------+
+# | dst |   | me |      | me |   | router |
+# +-----+   +----+      +----+   +--------+
+#             |           |          |
+#          +-----+    +--------+  +-----+
+#          | dst |    | router |  | dst |
+#          +-----+    +--------+  +-----+
+#                         |
+#                      +-----+
+#                      | dst |
+#                      +-----+
+#
+# - The second model family, when source and destination are towards the same
+#    interface:
+#
+# +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+
+# | src | | dst | | src | | dst | | src | | dst | | src | | dst | | src | | dst |
+# +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+ +-----+
+#    |       |       |       |       |        |      |        |     |        |
+#    |       |       |       |       |        |      |        |    -+----+---+-
+#    |       |       |       |       |        |      |        |          |
+#   -+--+----+-      |       |       |        |   +--------+ +--------+  |
+#       |            |       |       |        |   | router | | router |  |
+# +--------+     +--------+  |       | +--------+ +--------+ +--------+  |
+# | router |     | router |  |       | | router |     |          |       |
+# +--------+     +--------+  |       | +--------+    -+-----+----+-    +----+
+#      |            |        |       |      |               |          | me |
+#   +----+         -+--+-----+-     -+--+---+-            +----+       +----+
+#   | me |             |                |                 | me |
+#   +----+          +----+           +----+               +----+
+#                   | me |           | me |
+#                   +----+           +----+
+#
+# Looking at these diagrams, we can extract 3 type of boxes:
+# - standard and simple unique box: draw_block()
+#
+#          |
+# +----------------+
+# | src/dst/router |
+# | IP: address    |
+# | ARP: MAC       |
+# +----------------+
+#         |
+#
+# - A dual box on the same level: draw_2blocks()
+#
+# +---------------+ +---------------+
+# | src or router | | dst or router |
+# +---------------+ +---------------+
+#
+
+# - A 'me' block: draw_me()
+#
+#     |
+# +---------+
+# | if_name |
+# | if_ip   |
+# | route   |
+# (next only if src_int != dst_int)
+# | route   |
+# | if_ip   |
+# | if_name |
+# +---------+
+#     |
+########################################################
+
+# Forcing clean script
+set -eu
+
+# Functions definitions
+
+# A usefull function (from: http://code.google.com/p/sh-die/)
+die() { echo -n "EXIT: " >&2; echo "$@" >&2; exit 1; }
+
+usage() {
+	echo "Usage:"
+	echo "$0 [-v] source-IP destination-IP"
+	echo "  -v: display version number"
+	echo "Example:"
+	echo "  $0 198.18.0.10 198.19.0.10"
+	exit 0
+}
+
+draw_block () {
+	# Draw one block for source&destination host and router
+	local model=$1       # src or dst, used for drawing link on the upper or lower side
+	local label=$2       # text to display into the block
+	local ip=$3          # IP address for src & dst host (=direct for a router)
+	local gateway=$4     #  IP address for a router
+	local gateway_arp=$5 # ARP cache if directly connected to "me" block
+	local position=$6
+	left=""
+	right=""
+	# There is a special case: If ip=direct, this mean this block is useless
+	[ "$ip" = direct ] && return 0
+	# If in second family mode, need to move or add vertical line
+	[ "${position}" = "left" ] && left="                  |               "
+	[ "${position}" = "right" ] && right="                  |"
+	# If label is "ROUTER TOWARDS DESTINATION", need to move this block to the left
+	#echo ${label} | grep -q "ROUTER TOWARDS DESTINATION" && left="                  |               "
+	# If label is "ROUTER TOWARDS SOURCE", need to add an vertical line to the left"
+	#echo ${label} | grep -q "ROUTER TOWARDS SOURCE" && right="                  |"
+	[ "$model" = "dst" -a -z "${left}" ] && echo "${left}              |${right}"
+	echo "${left}+----------------------------+${right}"
+	printf '%s| %-26s |%s\n' "${left}" "${label}" "${right}"
+	printf '%s| IP:   %-21s|%s\n' "${left}" ${ip} "${right}"
+	[ "$gateway" = "direct" ] && printf '%s| ARP:  %-21s|%s\n' "${left}" "${gateway_arp}" "${right}"
+	echo "${left}+----------------------------+${right}"
+	[ "$model" = "src" -o -n "${left}" ] && echo "${left}              |               ${right}" || true
+}
+
+draw_2blocks () {
+	# Draw two blocks on the same level
+	# Second model family
+	local label1=$1
+	local label2=$2
+	echo "+----------------------------+    +----------------------------+"
+	printf '| %-26s |    | %-26s |\n' "${label1}" "${label2}"
+	if echo "${label1}" | grep -q 'ROUTER'; then
+		printf '| IP:   %-18s   |    | IP:  %-18s    |\n' ${src_gateway} ${dst_gateway}
+		printf '| ARP:  %-18s   |    | ARP:  %-18s   |\n' ${src_gateway_arp} ${dst_gateway_arp}
+	else
+    	printf '| IP:   %-18s   |    | IP:  %-18s    |\n' ${src_ip} ${dst_ip}
+	fi
+	if [ "${src_gateway}" = "direct" ]; then
+		printf '| ARP:  %-18s   |' ${src_gateway_arp}
+	elif [ "${dst_gateway}" = "direct" ]; then
+		printf '|                            |'
+	fi
+    if [ "${dst_gateway}" = "direct" ]; then
+        printf '    | ARP: %-18s    |\n' ${dst_gateway_arp}
+	elif [ "${src_gateway}" = "direct" ]; then
+		printf '    |                            |\n'
+    fi
+	echo "+----------------------------+    +----------------------------+"
+	echo "                  |                             |"
+}
+
+draw_me () {
+	# Draw this device block
+	echo "+----------------------------+"
+	printf '| IF:   %-18s   |\n' ${src_interface}
+	printf '| MAC:  %-18s   |\n' ${src_interface_mac}
+	printf '| IP:   %-18s   |\n' ${src_interface_ip}
+	printf '| net:  %-18s   |\n' ${src_destination}
+	[ -n "${src_mask}" ] && printf '| mask: %-18s   |\n' ${src_mask}
+	echo "|                            |"
+	echo "|         THIS ${device}        |"
+	if [ "${src_interface}" != "${dst_interface}" ]; then
+		# First model type, need to draw lower part
+		echo "|                            |"
+    	printf '| net:  %-18s   |\n' ${dst_destination}
+    	[ -n "${dst_mask}" ] && printf '| mask: %-18s   |\n' ${dst_mask}
+    	printf '| IP:   %-18s   |\n' ${dst_interface_ip}
+    	printf '| MAC:  %-18s   |\n' ${dst_interface_mac}
+    	printf '| IF:   %-18s   |\n' ${dst_interface}
+	fi
+	echo "+----------------------------+"
+}
+
+get_bsd() {
+	# Extract routes data
+	# Check if router enabled
+	[ $(sysctl -n net.inet.ip.forwarding) -eq 0 ] && forwarding=false || forwarding=true
+	[ $(sysctl -n net.inet6.ip6.forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
+
+	# Populate src_* and dst_* variables
+	for i in src dst; do
+		eval "
+			# if route didn't fill _gateway, this mean its directly connected
+			${i}_gateway='direct'
+
+			# some route crossing PPP tun doesn't have _mask
+			${i}_mask='255.255.255.255'
+
+			# call route only once
+			tmp=\$(mktemp)
+			route -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
+
+			# Output are like this one:
+			#   route to: 2.2.2.2
+			#destination: 0.0.0.0
+			#       mask: 0.0.0.0
+			#    gateway: 192.168.1.100
+			#        fib: 0
+			#  interface: bxe3
+			#      flags: <UP,GATEWAY,DONE,STATIC>
+			# recvpipe  sendpipe  ssthresh  rtt,msec    mtu        weight    expire
+			#       0         0         0         0      1500         1         0
+
+			while read line; do
+				data=\$(echo \$line | cut -d ':' -f 1)
+				case \$data in
+				\"route to\")
+					${i}_routeto=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					;;
+				destination)
+					${i}_destination=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					;;
+				mask)
+					${i}_mask=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					;;
+				gateway)
+					${i}_gateway=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					;;
+				fib)
+					${i}_fib=\$(echo \$line | cut -d ':' -f 2)
+					;;
+				interface)
+					${i}_interface=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					${i}_interface_mac=\$(ifconfig \${${i}_interface} | grep -E 'ether|lladdr|address' | cut -d ' ' -f 2)
+					${i}_interface_ip=\$(ifconfig \${${i}_interface} | grep -w inet | cut -d ' ' -f 2)
+					;;
+				flags)
+					${i}_flags=\$(echo \$line | cut -d ':' -f 2)
+					;;
+				esac
+			done < \${tmp}
+			[ \"\${${i}_gateway}\" = \"direct\" ] && lookup=\${${i}_routeto} || lookup=\${${i}_gateway}
+			case \${OS} in
+			OpenBSD)
+				${i}_gateway_arp=\$(arp -n \${lookup} | grep \${lookup} | tr -s ' ' | cut -d ' ' -f 2)
+				;;
+			*)
+				${i}_gateway_arp=\$(arp -n \${lookup} | cut -d ' ' -f 4)
+				;;
+			esac
+			[ \"\${${i}_gateway_arp}\" = \"no\" ] && ${i}_gateway_arp='empty' || true
+		"
+		rm ${tmp} || die "can't delete ${tmp}"
+	done
+}
+
+get_linux () {
+	# Extract routes data from a Linux
+	# ip route has a non consistent output: STUPID Linux !
+	# Check if router enabled
+	[ $(cat /proc/sys/net/ipv4/ip_forward) -eq 0 ] && forwarding=false || forwarding=true
+	[ $(cat /proc/sys/net/ipv6/conf/all/forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
+
+	# Populate src_* and dst_* variables
+	for i in src dst; do
+		eval "
+			# if route didn't fill _gateway, this mean its directly connected
+			${i}_gateway='direct'
+
+			# No mask on linux (using a / into the destination variable)
+			${i}_mask=''
+
+			# call route only once
+			tmp=\$(mktemp)
+			ip -o route get \${${i}_ip} > \${tmp}
+
+			# Output are like these:
+			# 2.2.2.3 via 10.253.52.126 dev eth2 src 10.253.52.115 \ cache
+			# 192.168.237.116 dev eth1.337 src 192.168.237.115 \    cache
+			# 10.253.52.124 dev eth2 src 10.253.52.115 \    cache
+			# local 127.0.0.1 dev lo src 127.0.0.1
+
+			read ip via gateway dev if src if_ip < \${tmp}
+			if [ \"\${via}\" = \"via\" ]; then
+				${i}_routeto=\${${i}_ip}
+				${i}_gateway=\${gateway}
+				${i}_gateway_arp=\$(ip neigh show \${${i}_gateway} | cut -d ' ' -f 5)
+				${i}_interface=\${if}
+				${i}_interface_ip=\$(echo \${if_ip} | cut -d ' ' -f1)
+			elif [ \"\${via}\" = \"dev\" ]; then
+				${i}_routeto=\${${i}_ip}
+				${i}_interface=\${gateway}
+				${i}_interface_ip=\$(echo \${if} | cut -d ' ' -f1)
+			else
+				echo "WARNING: Not supported condition!"
+				${i}_routeto=\${via}
+				${i}_interface=\${dev}
+				${i}_interface_ip=\${via}
+			fi
+			${i}_interface_mac=\$(ip link show \${${i}_interface}| grep ether | tr -s ' ' | cut -d ' ' -f 3)
+
+			# We still need other data (destination subnet and mask)
+			# need to use another ip commande for getting the subnet matching
+			# ip route show to match 192.168.229.58
+			# default via 10.253.52.126 dev eth2 onlink
+			# 192.168.229.56/29 via 192.168.237.100 dev eth1.337
+			${i}_destination=\$(ip -o route show to match \${${i}_ip} | grep \${if} | cut -d ' ' -f1)
+
+			if [ \"\${${i}_gateway}\" = \"direct\" ]; then
+				${i}_gateway_arp=\$(ip neigh show \${${i}_routeto} | cut -d ' ' -f 5)
+				[ \"\${${i}_gateway_arp}\" = \"no\" ] && ${i}_gateway_arp='empty' || true
+			fi
+		"
+		rm ${tmp} || die "can't delete ${tmp}"
+	done
+}
+
+### Main function ###
+
+version="1.0"
+
+if [ "$#" -eq 1 ]; then
+	if [ "$1" = "-v" ]; then
+		echo "Version ${version}"
+		exit 0
+	else
+		usage
+	fi
+fi
+[ "$#" -ne 2 ] && usage
+
+src_ip=$1
+dst_ip=$2
+device="ROUTER"
+
+# Small checks
+[ "${src_ip}" = "${dst_ip}" ] && die "Same source and destination IP addresses"
+
+OS=$(uname)
+case ${OS} in
+	FreeBSD|OpenBSD|NetBSD)
+		get_bsd
+		;;
+	Linux)
+		get_linux
+		;;
+	*)
+		die "This script was not tested on ${OS}"
+		;;
+esac
+
+if [ $forwarding = false -o $forwarding6 = false ]; then
+	device="HOST  "
+fi
+
+
+[ "${device}" = "HOST" ] && echo "This tool is mainly designed for drawing router or firewall routing view"
+
+### Start ASCII drawing
+
+if [ "${src_interface}" != "${dst_interface}" ]; then
+	# First model family
+	if [ "${src_ip}" != "${src_interface_ip}" ]; then
+		draw_block src 'SOURCE HOST' "${src_ip}" "${src_gateway}" "${src_gateway_arp}" ""
+		[ "${src_gateway}" != "direct" ] && draw_block src 'ROUTER TOWARDS SOURCE' "${src_gateway}" direct "${src_gateway_arp}" ""
+	fi
+	draw_me
+	if [ "${dst_ip}" != "${dst_interface_ip}" ]; then
+		[ "${dst_gateway}" != "direct" ] && draw_block dst 'ROUTER TOWARDS DESTINATION' "${dst_gateway}" direct "${dst_gateway_arp}" ""
+		draw_block dst 'DESTINATION HOST' "${dst_ip}" "${dst_gateway}" "${dst_gateway_arp}" ""
+	fi
+else
+	# Second model family
+	draw_2blocks 'SOURCE HOST' 'DESTINATION HOST'
+	if [ "${src_gateway}" = "${dst_gateway}" ]; then
+		echo "            --+---+-----------------------------+---"
+		echo "              | "
+		draw_block src 'ROUTER' "${src_gateway}" direct "${src_gateway_arp}" ""
+	else
+		if [ "${src_gateway}" != "direct" -a "${dst_gateway}" = "direct" ]; then
+			draw_block src 'ROUTER TOWARDS SOURCE' "${src_gateway}" direct "${src_gateway_arp}" "right"
+		elif [ "${dst_gateway}" != "direct" -a "${src_gateway}" = "direct" ]; then
+			draw_block dst 'ROUTER TOWARDS DESTINATION' "${dst_gateway}" direct "${dst_gateway_arp}" "left"
+		else
+			draw_2blocks 'ROUTER TOWARDS SOURCE' 'ROUTER TOWARDS DESTINATION'
+		fi
+		echo "            --+---+-----------------------------+---"
+		echo "                  |"
+	fi
+	draw_me
+fi
