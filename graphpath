@@ -361,7 +361,7 @@ device="ROUTER"
 
 OS=$(uname)
 case ${OS} in
-	FreeBSD|OpenBSD|NetBSD)
+	FreeBSD|OpenBSD|NetBSD|Darwin)
 		get_bsd
 		;;
 	Linux)
