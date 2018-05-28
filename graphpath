@@ -281,8 +281,16 @@ get_linux () {
 	# Extract routes data from a Linux
 	# ip route has a non consistent output: STUPID Linux !
 	# Check if router enabled
-	[ $(cat /proc/sys/net/ipv4/ip_forward) -eq 0 ] && forwarding=false || forwarding=true
-	[ $(cat /proc/sys/net/ipv6/conf/all/forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
+	if [ -f /proc/sys/net/ipv4/ip_forward ]; then
+		[ $(cat /proc/sys/net/ipv4/ip_forward) -eq 0 ] && forwarding=false || forwarding=true
+	else
+		forwarding=false
+	fi
+	if [ -f /proc/sys/net/ipv6/conf/all/forwarding ]; then
+		[ $(cat /proc/sys/net/ipv6/conf/all/forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
+	else
+		forwarding6=false
+	fi
 
 	# Populate src_* and dst_* variables
 	for i in src dst; do

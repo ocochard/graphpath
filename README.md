@@ -7,7 +7,11 @@ Graphpath generates an ASCII network diagram from the route table of a Unix/Linu
 
 ## Dependecy
 
-None: it's just a shell script using standards tools (route, arp and ifconfig on *BSD and ip on Linux)
+None: it's just a shell script using standards tools (route, arp, ifconfig on *BSD and ip on Linux).
+
+## To Do
+
+Adding IPv6 support.
 
 ## Examples
 
