@@ -140,19 +140,19 @@ draw_block () {
 	# There is a special case: If ip=direct, this mean this block is useless
 	[ "$ip" = direct ] && return 0
 	# If in second family mode, need to move or add vertical line
-	[ "${position}" = "left" ] && left="                  |               "
+	[ "${position}" = "left" ] && left="                  |                  "
 	[ "${position}" = "right" ] && right="                  |"
 	# If label is "ROUTER TOWARDS DESTINATION", need to move this block to the left
-	#echo ${label} | grep -q "ROUTER TOWARDS DESTINATION" && left="                  |               "
-	# If label is "ROUTER TOWARDS SOURCE", need to add an vertical line to the left"
-	#echo ${label} | grep -q "ROUTER TOWARDS SOURCE" && right="                  |"
-	[ "$model" = "dst" -a -z "${left}" ] && echo "${left}              |${right}"
-	echo "${left}+----------------------------+${right}"
-	printf '%s| %-26s |%s\n' "${left}" "${label}" "${right}"
-	printf '%s| IP:   %-21s|%s\n' "${left}" ${ip} "${right}"
-	[ "$gateway" = "direct" ] && printf '%s| ARP:  %-21s|%s\n' "${left}" "${gateway_arp}" "${right}"
-	echo "${left}+----------------------------+${right}"
-	[ "$model" = "src" -o -n "${left}" ] && echo "${left}              |               ${right}" || true
+	#echo ${label} | grep -q "ROUTER TOWARDS DESTINATION" && left="                     |               "
+	# If label is "ROUTER TOWARDS SOURCE", need to add an vertical line to the right"
+	#echo ${label} | grep -q "ROUTER TOWARDS SOURCE" && right="                     |"
+	[ "$model" = "dst" -a -z "${left}" ] && echo "${left}                 |${right}"
+	echo "${left}+-------------------------------+${right}"
+	printf '%s| %-29s |%s\n' "${left}" "${label}" "${right}"
+	printf '%s| IP:   %-24s|%s\n' "${left}" ${ip} "${right}"
+	[ "$gateway" = "direct" ] && printf '%s| ARP:  %-24s|%s\n' "${left}" "${gateway_arp}" "${right}"
+	echo "${left}+-------------------------------+${right}"
+	[ "$model" = "src" -o -n "${left}" ] && echo "${left}              |                  ${right}" || true
 }
 
 draw_2blocks () {
@@ -160,48 +160,48 @@ draw_2blocks () {
 	# Second model family
 	local label1=$1
 	local label2=$2
-	echo "+----------------------------+    +----------------------------+"
-	printf '| %-26s |    | %-26s |\n' "${label1}" "${label2}"
+	echo "+-------------------------------+    +-------------------------------+"
+	printf '| %-29s |    | %-29s |\n' "${label1}" "${label2}"
 	if echo "${label1}" | grep -q 'ROUTER'; then
-		printf '| IP:   %-18s   |    | IP:  %-18s    |\n' ${src_gateway} ${dst_gateway}
-		printf '| ARP:  %-18s   |    | ARP:  %-18s   |\n' ${src_gateway_arp} ${dst_gateway_arp}
+		printf '| IP:   %-21s   |    | IP:  %-21s    |\n' ${src_gateway} ${dst_gateway}
+		printf '| ARP:  %-21s   |    | ARP:  %-21s   |\n' ${src_gateway_arp} ${dst_gateway_arp}
 	else
-    	printf '| IP:   %-18s   |    | IP:  %-18s    |\n' ${src_ip} ${dst_ip}
+    	printf '| IP:   %-21s   |    | IP:  %-21s    |\n' ${src_ip} ${dst_ip}
 	fi
 	if [ "${src_gateway}" = "direct" ]; then
-		printf '| ARP:  %-18s   |' ${src_gateway_arp}
+		printf '| ARP:  %-21s   |' ${src_gateway_arp}
 	elif [ "${dst_gateway}" = "direct" ]; then
-		printf '|                            |'
+		printf '|                               |'
 	fi
-    if [ "${dst_gateway}" = "direct" ]; then
-        printf '    | ARP: %-18s    |\n' ${dst_gateway_arp}
+	if [ "${dst_gateway}" = "direct" ]; then
+        	printf '    | ARP: %-21s    |\n' ${dst_gateway_arp}
 	elif [ "${src_gateway}" = "direct" ]; then
-		printf '    |                            |\n'
-    fi
-	echo "+----------------------------+    +----------------------------+"
-	echo "                  |                             |"
+		printf '    |                               |\n'
+	fi
+	echo "+-------------------------------+    +-------------------------------+"
+	echo "                  |                                |"
 }
 
 draw_me () {
 	# Draw this device block
-	echo "+----------------------------+"
-	printf '| IF:   %-18s   |\n' ${src_interface}
-	printf '| MAC:  %-18s   |\n' ${src_interface_mac}
-	printf '| IP:   %-18s   |\n' ${src_interface_ip}
-	printf '| net:  %-18s   |\n' ${src_destination}
-	[ -n "${src_mask}" ] && printf '| mask: %-18s   |\n' ${src_mask}
-	echo "|                            |"
-	echo "|         THIS ${device}        |"
+	echo "+-------------------------------+"
+	printf '| IF:   %-21s   |\n' ${src_interface}
+	printf '| MAC:  %-21s   |\n' ${src_interface_mac}
+	printf '| IP:   %-21s   |\n' ${src_interface_ip}
+	printf '| net:  %-21s   |\n' ${src_destination}
+	[ -n "${src_mask}" ] && printf '| mask: %-21s   |\n' ${src_mask}
+	echo "|                               |"
+	echo "|          THIS ${device}          |"
 	if [ "${src_interface}" != "${dst_interface}" ]; then
 		# First model type, need to draw lower part
-		echo "|                            |"
-    	printf '| net:  %-18s   |\n' ${dst_destination}
-    	[ -n "${dst_mask}" ] && printf '| mask: %-18s   |\n' ${dst_mask}
-    	printf '| IP:   %-18s   |\n' ${dst_interface_ip}
-    	printf '| MAC:  %-18s   |\n' ${dst_interface_mac}
-    	printf '| IF:   %-18s   |\n' ${dst_interface}
+		echo "|                               |"
+		printf '| net:  %-21s   |\n' ${dst_destination}
+		[ -n "${dst_mask}" ] && printf '| mask: %-21s   |\n' ${dst_mask}
+		printf '| IP:   %-21s   |\n' ${dst_interface_ip}
+    		printf '| MAC:  %-21s   |\n' ${dst_interface_mac}
+    		printf '| IF:   %-21s   |\n' ${dst_interface}
 	fi
-	echo "+----------------------------+"
+	echo "+-------------------------------+"
 }
 
 get_bsd() {
@@ -210,6 +210,8 @@ get_bsd() {
 	[ $(sysctl -n net.inet.ip.forwarding) -eq 0 ] && forwarding=false || forwarding=true
 	[ $(sysctl -n net.inet6.ip6.forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
 
+	(${inet6}) && family="-6" || family="-4"
+	tmp=$(mktemp)
 	# Populate src_* and dst_* variables
 	for i in src dst; do
 		eval "
@@ -220,10 +222,10 @@ get_bsd() {
 			${i}_mask='255.255.255.255'
 
 			# call route only once
-			tmp=\$(mktemp)
-			route -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
+			route \${family} -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
 
 			# Output are like this one:
+			### inet4 ###
 			#   route to: 2.2.2.2
 			#destination: 0.0.0.0
 			#       mask: 0.0.0.0
@@ -233,32 +235,44 @@ get_bsd() {
 			#      flags: <UP,GATEWAY,DONE,STATIC>
 			# recvpipe  sendpipe  ssthresh  rtt,msec    mtu        weight    expire
 			#       0         0         0         0      1500         1         0
+			### inet6 ###
+			#   route to: 2001:db8:11::11
+			#destination: 2001:db8:11::
+			#       mask: ffff:ffff:ffff:ffff::
+			#    gateway: 2001:db8:1::11
+			#        fib: 0
+			#  interface: bridge1
+			#      flags: <UP,GATEWAY,DONE,STATIC>
+			# recvpipe  sendpipe  ssthresh  rtt,msec    mtu        weight    expire
+			#       0         0         0         0      1500         1         0
 
 			while read line; do
 				data=\$(echo \$line | cut -d ':' -f 1)
 				case \$data in
+				# Theorically we can remove for all lines, the first 13 characters
+				# but the while read didn't take care of the first spaces
 				\"route to\")
-					${i}_routeto=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					${i}_routeto=\${line#??????????}
 					;;
 				destination)
-					${i}_destination=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					${i}_destination=\${line#?????????????}
 					;;
 				mask)
-					${i}_mask=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					${i}_mask=\${line#??????}
 					;;
 				gateway)
-					${i}_gateway=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					${i}_gateway=\${line#?????????}
 					;;
 				fib)
-					${i}_fib=\$(echo \$line | cut -d ':' -f 2)
+					${i}_fib=\${line#?????}
 					;;
 				interface)
-					${i}_interface=\$(echo \$line | cut -d ':' -f 2 | tr -d ' ')
+					${i}_interface=\${line#???????????}
 					${i}_interface_mac=\$(ifconfig \${${i}_interface} | grep -E 'ether|lladdr|address' | cut -d ' ' -f 2)
 					${i}_interface_ip=\$(ifconfig \${${i}_interface} | grep -w inet | cut -d ' ' -f 2)
 					;;
 				flags)
-					${i}_flags=\$(echo \$line | cut -d ':' -f 2)
+					${i}_flags=\${line#?????????}
 					;;
 				esac
 			done < \${tmp}
@@ -268,7 +282,11 @@ get_bsd() {
 				${i}_gateway_arp=\$(arp -n \${lookup} | grep \${lookup} | tr -s ' ' | cut -d ' ' -f 2)
 				;;
 			*)
-				${i}_gateway_arp=\$(arp -n \${lookup} | cut -d ' ' -f 4)
+				if (\${inet6}); then
+					${i}_gateway_arp=\$(ndp -n \${lookup} | tail -1 | tr -s ' ' | cut -d ' ' -f 2)
+				else
+					${i}_gateway_arp=\$(arp -n \${lookup} | cut -d ' ' -f 4)
+				fi
 				;;
 			esac
 			[ \"\${${i}_gateway_arp}\" = \"no\" ] && ${i}_gateway_arp='empty' || true
@@ -291,7 +309,7 @@ get_linux () {
 	else
 		forwarding6=false
 	fi
-
+	tmp=$(mktemp)
 	# Populate src_* and dst_* variables
 	for i in src dst; do
 		eval "
@@ -302,7 +320,6 @@ get_linux () {
 			${i}_mask=''
 
 			# call route only once
-			tmp=\$(mktemp)
 			ip -o route get \${${i}_ip} > \${tmp}
 
 			# Output are like these:
@@ -348,7 +365,7 @@ get_linux () {
 
 ### Main function ###
 
-version="1.0"
+version="1.1"
 
 if [ "$#" -eq 1 ]; then
 	if [ "$1" = "-v" ]; then
@@ -363,9 +380,11 @@ fi
 src_ip=$1
 dst_ip=$2
 device="ROUTER"
+inet6=false
 
 # Small checks
 [ "${src_ip}" = "${dst_ip}" ] && die "Same source and destination IP addresses"
+$(echo ${src_ip} | grep -q ':') && inet6=true
 
 OS=$(uname)
 case ${OS} in
@@ -404,7 +423,7 @@ else
 	# Second model family
 	draw_2blocks 'SOURCE HOST' 'DESTINATION HOST'
 	if [ "${src_gateway}" = "${dst_gateway}" ]; then
-		echo "            --+---+-----------------------------+---"
+		echo "            --+---+--------------------------------+---"
 		echo "              | "
 		draw_block src 'ROUTER' "${src_gateway}" direct "${src_gateway_arp}" ""
 	else
@@ -415,7 +434,7 @@ else
 		else
 			draw_2blocks 'ROUTER TOWARDS SOURCE' 'ROUTER TOWARDS DESTINATION'
 		fi
-		echo "            --+---+-----------------------------+---"
+		echo "            --+---+--------------------------------+---"
 		echo "                  |"
 	fi
 	draw_me

@@ -11,7 +11,7 @@ None: it's just a shell script using standards tools (route, arp, ifconfig on *B
 
 ## To Do
 
-Adding IPv6 support.
+Writing IPv6 support for Linux and OpenBSD (works on FreeBSD only)
 
 ## Examples
 
