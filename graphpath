@@ -297,6 +297,7 @@ get_bsd() {
 
 get_linux () {
 	# Extract routes data from a Linux
+	(${inet6}) && family="-6" || family="-4"
 	# ip route has a non consistent output: STUPID Linux !
 	# Check if router enabled
 	if [ -f /proc/sys/net/ipv4/ip_forward ]; then
@@ -327,6 +328,7 @@ get_linux () {
 			# 192.168.237.116 dev eth1.337 src 192.168.237.115 \    cache
 			# 10.253.52.124 dev eth2 src 10.253.52.115 \    cache
 			# local 127.0.0.1 dev lo src 127.0.0.1
+			# 2607:f8b0:4004:80c::200e from :: via 2001:470:66:324::1 dev he-ipv6 src 2001:470:66:324::2 metric 1024  pref medium
 
 			read ip via gateway dev if src if_ip < \${tmp}
 			if [ \"\${via}\" = \"via\" ]; then
@@ -339,6 +341,14 @@ get_linux () {
 				${i}_routeto=\${${i}_ip}
 				${i}_interface=\${gateway}
 				${i}_interface_ip=\$(echo \${if} | cut -d ' ' -f1)
+			elif [ \"\${via}\" = \"from\" ]; then
+				# Inet6 route
+				${i}_routeto=\${${i}_ip}
+				${i}_gateway=\${if}
+				# 2002:333:333::1 dev eth1 lladdr 00:12:1e:33:AA:BB router REACHABLE
+				${i}_gateway_arp=\$(ip -6 neigh show \${${i}_gateway} | cut -d ' ' -f 5)
+				${i}_interface=\$(echo \${if_ip} | cut -d ' ' -f1)
+				${i}_interface_ip=\$(echo \${if_ip} | cut -d ' ' -f3)
 			else
 				echo "WARNING: Not supported condition!"
 				${i}_routeto=\${via}
@@ -348,11 +358,11 @@ get_linux () {
 			${i}_interface_mac=\$(ip link show \${${i}_interface}| grep ether | tr -s ' ' | cut -d ' ' -f 3)
 
 			# We still need other data (destination subnet and mask)
-			# need to use another ip commande for getting the subnet matching
+			# need to use another ip command to retrieve the subnet matching
 			# ip route show to match 192.168.229.58
 			# default via 10.253.52.126 dev eth2 onlink
 			# 192.168.229.56/29 via 192.168.237.100 dev eth1.337
-			${i}_destination=\$(ip -o route show to match \${${i}_ip} | grep \${if} | cut -d ' ' -f1)
+			${i}_destination=\$(ip -o \${family} route show to match \${${i}_ip} | grep \${if} | cut -d ' ' -f1)
 
 			if [ \"\${${i}_gateway}\" = \"direct\" ]; then
 				${i}_gateway_arp=\$(ip neigh show \${${i}_routeto} | cut -d ' ' -f 5)
