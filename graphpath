@@ -154,10 +154,8 @@ draw_lan_line () {
 	# --+---+-----------------------------+---
 	# This line is only used in top of 'THIS ROUTER' box
 
-	eval "printf '%-$((box_hw - 1))s--+---+'"
-	for i in $(jot $((box_w - 4)) 0); do
-		printf '-'
-	done
+	printf '%*s--+---+' $((box_hw - 1))
+	printf '%*s' $((box_w - 4)) ' ' | tr ' ' '-'
 	printf '+---\n'
 }
 
@@ -178,13 +176,11 @@ draw_block_line () {
 	# +----------------------------+
 	# The 'me' box didn't need left & right padding
 	# because it's always put on the left side
-
 	local ll_pad=$1
 	local lr_pad=$2
+
 	printf "%s+" "${ll_pad}"
-	for i in $(jot $((box_w + 1)) 0); do
-		printf "-"
-	done
+	printf '%*s' $((box_w + 1)) ' ' | tr ' ' '-'
 	printf "+%s\n" "${lr_pad}"
 }
 
@@ -193,13 +189,9 @@ draw_2blocks_line () {
 	# +-----------------------------+  +-----------------------------+
 
 	printf "+"
-	for i in $(jot $((box_w + 1)) 0); do
-		printf "-"
-	done
+	printf '%*s' $((box_w + 1)) ' ' | tr ' ' '-'
 	printf "+  +"
-	for i in $(jot $((box_w + 1)) 0); do
-		printf "-"
-	done
+	printf '%*s' $((box_w + 1)) ' ' | tr ' ' '-'
 	printf "+\n"
 }
 
@@ -233,7 +225,7 @@ draw_block () {
 		eval "l_pad=\$(printf '%-$((box_hw + 1))s|%-$((box_hw + 5))s')"
 	fi
 	if [ "${position}" = "right" ]; then
-		eval "r_pad=\$(printf '%-$((box_hw - 1))s|')"
+		r_pad=$(printf '%*s|' $((box_hw - 1)))
 	fi
 
 	if [ "$model" = "dst" -a -z "${l_pad}" ]; then
@@ -256,10 +248,14 @@ draw_block () {
 	draw_block_line "${l_pad}" "${r_pad}"
 
 	# Draw block lower connectors
-	# needs a simple connectors if l_pad and r_pad are empty
-	# needs dual connectors in other case
-	[ -z "${l_pad}" -a -z "${r_pad}" ] && draw_connector || draw_dual_connectors
-
+	if [ "$model" = "src" ]; then
+		# needs a simple connectors if l_pad and r_pad are empty
+		# needs dual connectors in other case
+		[ -z "${l_pad}" -a -z "${r_pad}" ] && draw_connector || draw_dual_connectors
+	else
+		# If destination block and l_pad used, need a dual connectors
+		[ -n "${l_pad}" ] && draw_dual_connectors
+	fi
 }
 
 draw_2blocks () {
@@ -297,7 +293,6 @@ draw_me () {
 	# Draw box's lower line
 	draw_block_line "" ""
 	eval "
-		printf '| IF:   %-$((box_w - 6))s|\n' \${src_interface}
 		printf '| IF:   %-$((box_w - 6))s|\n' \${src_interface}
 		printf '| MAC:  %-$((box_w - 6))s|\n' \${src_interface_mac}
 		printf '| IP:   %-$((box_w - 6))s|\n' \${src_interface_ip}
@@ -397,7 +392,11 @@ get_bsd() {
 				interface)
 					${i}_interface=\${line#???????????}
 					${i}_interface_mac=\$(ifconfig \${${i}_interface} | grep -E 'ether|lladdr|address' | cut -d ' ' -f 2)
-					${i}_interface_ip=\$(ifconfig \${${i}_interface} | grep -w inet | cut -d ' ' -f 2)
+					if (\${inet6}); then
+						${i}_interface_ip=\$(ifconfig \${${i}_interface} | grep -w inet6 | head -1 | cut -d ' ' -f 2)
+					else
+						${i}_interface_ip=\$(ifconfig \${${i}_interface} | grep -w inet | cut -d ' ' -f 2)
+					fi
 					;;
 				flags)
 					${i}_flags=\${line#?????????}
@@ -505,7 +504,7 @@ get_linux () {
 
 ### Main function ###
 
-version="1.1"
+version="1.2"
 
 if [ "$#" -eq 1 ]; then
 	if [ "$1" = "-v" ]; then
