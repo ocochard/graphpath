@@ -155,7 +155,7 @@ draw_lan_line () {
 	# This line is only used in top of 'THIS ROUTER' box
 
 	eval "printf '%-$((box_hw - 1))s--+---+'"
-	for i in $(seq 0 $((box_w - 5))); do
+	for i in $(jot $((box_w - 4)) 0); do
 		printf '-'
 	done
 	printf '+---\n'
@@ -182,7 +182,7 @@ draw_block_line () {
 	local ll_pad=$1
 	local lr_pad=$2
 	printf "%s+" "${ll_pad}"
-	for i in $(seq 0 ${box_w}); do
+	for i in $(jot $((box_w + 1)) 0); do
 		printf "-"
 	done
 	printf "+%s\n" "${lr_pad}"
@@ -193,11 +193,11 @@ draw_2blocks_line () {
 	# +-----------------------------+  +-----------------------------+
 
 	printf "+"
-	for i in $(seq 0 ${box_w}); do
+	for i in $(jot $((box_w + 1)) 0); do
 		printf "-"
 	done
 	printf "+  +"
-	for i in $(seq 0 ${box_w}); do
+	for i in $(jot $((box_w + 1)) 0); do
 		printf "-"
 	done
 	printf "+\n"
@@ -343,7 +343,14 @@ get_bsd() {
 			${i}_mask='255.255.255.255'
 
 			# call route only once
-			route \${family} -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
+			case \${OS} in
+                        FreeBSD)
+				route \${family} -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
+				;;
+                        *)
+				route -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
+				;;
+			esac
 
 			# Output are like this one:
 			### inet4 ###
@@ -398,20 +405,20 @@ get_bsd() {
 				esac
 			done < \${tmp}
 			[ \"\${${i}_gateway}\" = \"direct\" ] && lookup=\${${i}_routeto} || lookup=\${${i}_gateway}
-			case \${OS} in
-			OpenBSD)
-				${i}_gateway_arp=\$(arp -n \${lookup} | grep \${lookup} | tr -s ' ' | cut -d ' ' -f 2)
-				;;
-			*)
-				if (\${inet6}); then
-					${i}_gateway_arp=\$(ndp -n \${lookup} | tail -1 | tr -s ' ' | cut -d ' ' -f 2)
-					# When it's empty, it return the IPv6 address between ()
-					echo \${${i}_gateway_arp} | grep -q '(' && ${i}gateway_arp='empty'
-				else
+			if (\${inet6}); then
+				${i}_gateway_arp=\$(ndp -n \${lookup} | tail -1 | tr -s ' ' | cut -d ' ' -f 2)
+				# When it's empty, it return the IPv6 address between ()
+				echo \${${i}_gateway_arp} | grep -q '(' && ${i}_gateway_arp='empty'
+			else
+				case \${OS} in
+				OpenBSD)
+					${i}_gateway_arp=\$(arp -n \${lookup} | grep \${lookup} | tr -s ' ' | cut -d ' ' -f 2)
+					;;
+				*)
 					${i}_gateway_arp=\$(arp -n \${lookup} | cut -d ' ' -f 4)
-				fi
-				;;
-			esac
+					;;
+				esac
+			fi
 			[ \"\${${i}_gateway_arp}\" = \"no\" ] && ${i}_gateway_arp='empty' || true
 		"
 		rm ${tmp} || die "can't delete ${tmp}"

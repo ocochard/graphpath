@@ -11,7 +11,7 @@ None: it's just a shell script using standards tools (route, arp, ifconfig on *B
 
 ## To Do
 
-Testing IPv6 support on MacOSX and OpenBSD
+Testing IPv6 support on MacOSX
 
 ## Examples
 
