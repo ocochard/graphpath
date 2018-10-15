@@ -108,6 +108,27 @@
 # | if_name |
 # +---------+
 #     |
+#
+# - About the box witdh
+#
+# inet4 maximum witdh size:
+#| ROUTER TOWARDS DESTINATION |
+#| IP:   192.168.100.100      |
+#| ARP:  00:0d:b9:3c:a0:cd    |
+#+----------------------------+
+#123456789012345678901234567890
+#
+# => 30 (or 28 without line)
+#
+# inet6 maximum witdh size:
+#| IP:   2001:0db8:0000:0000:0000:ff00:0042:8329 |
+#| NDP:  00:0d:b9:3c:a0:cd                       |
+#+-----------------------------------------------+
+#1234567890123456789012345679012345679012345679012
+#
+# => 52 (or 50 without line)
+#
+#
 ########################################################
 
 # Forcing clean script
@@ -124,35 +145,121 @@ usage() {
 	echo "  -v: display version number"
 	echo "Example:"
 	echo "  $0 198.18.0.10 198.19.0.10"
+	echo "  $0 2001:db8:18::10 2001:db8:19::10"
 	exit 0
+}
+
+draw_lan_line () {
+	# Draw a LAN line, like this one:
+	# --+---+-----------------------------+---
+	# This line is only used in top of 'THIS ROUTER' box
+
+	eval "printf '%-$((box_hw - 1))s--+---+'"
+	for i in $(seq 0 $((box_w - 5))); do
+		printf '-'
+	done
+	printf '+---\n'
+}
+
+draw_connector () {
+	# Draw one connector, like this one:
+	#               |
+	eval "printf '%s%-$((box_hw))s|%s\n' "\${l_pad}\" "\${r_pad}\""
+}
+
+draw_dual_connectors () {
+	# Draw dual connectors, like this one:
+	#  |                             |
+	eval "printf '%-$((box_hw + 1))s|%-$((box_w))s|\n'"
+}
+
+draw_block_line () {
+	# Draw box's upper or lower line, like this one:
+	# +----------------------------+
+	# The 'me' box didn't need left & right padding
+	# because it's always put on the left side
+
+	local ll_pad=$1
+	local lr_pad=$2
+	printf "%s+" "${ll_pad}"
+	for i in $(seq 0 ${box_w}); do
+		printf "-"
+	done
+	printf "+%s\n" "${lr_pad}"
+}
+
+draw_2blocks_line () {
+	# Draw 2 box's upper or lower line, like this one:
+	# +-----------------------------+  +-----------------------------+
+
+	printf "+"
+	for i in $(seq 0 ${box_w}); do
+		printf "-"
+	done
+	printf "+  +"
+	for i in $(seq 0 ${box_w}); do
+		printf "-"
+	done
+	printf "+\n"
 }
 
 draw_block () {
 	# Draw one block for source&destination host and router
-	local model=$1       # src or dst, used for drawing link on the upper or lower side
-	local label=$2       # text to display into the block
-	local ip=$3          # IP address for src & dst host (=direct for a router)
-	local gateway=$4     #  IP address for a router
-	local gateway_arp=$5 # ARP cache if directly connected to "me" block
-	local position=$6
-	left=""
-	right=""
+	#
+	# $l_pad     |     $r_pad
+	# $l_pad +-------+ $r_pad
+	# $l_pad |$label | $r_pad
+	# $l_pad |$ip    | $r_pad
+	# $l_pad +-------+ $r_pad
+	# $l_pad     |     $r_pad
+	#
+	# l_pad will draw a vertical line on the left side of the box
+	# r_pad will draw a vertical line on the rigth side of the box
+
+	local model=$1		# src or dst, used for drawing link on the upper or lower side
+	local label=$2		# text to display into the block
+	local ip=$3		# IP address for src & dst host (=direct for a router)
+	local gateway=$4	#  IP address for a router
+	local gateway_arp=$5	# ARP cache if directly connected to "me" block
+	local position=$6	# left for box on left size, right other
+	l_pad=""		# left padding text
+	r_pad=""		# right padding text
+
 	# There is a special case: If ip=direct, this mean this block is useless
 	[ "$ip" = direct ] && return 0
+
 	# If in second family mode, need to move or add vertical line
-	[ "${position}" = "left" ] && left="                  |                  "
-	[ "${position}" = "right" ] && right="                  |"
-	# If label is "ROUTER TOWARDS DESTINATION", need to move this block to the left
-	#echo ${label} | grep -q "ROUTER TOWARDS DESTINATION" && left="                     |               "
-	# If label is "ROUTER TOWARDS SOURCE", need to add an vertical line to the right"
-	#echo ${label} | grep -q "ROUTER TOWARDS SOURCE" && right="                     |"
-	[ "$model" = "dst" -a -z "${left}" ] && echo "${left}                 |${right}"
-	echo "${left}+-------------------------------+${right}"
-	printf '%s| %-29s |%s\n' "${left}" "${label}" "${right}"
-	printf '%s| IP:   %-24s|%s\n' "${left}" ${ip} "${right}"
-	[ "$gateway" = "direct" ] && printf '%s| ARP:  %-24s|%s\n' "${left}" "${gateway_arp}" "${right}"
-	echo "${left}+-------------------------------+${right}"
-	[ "$model" = "src" -o -n "${left}" ] && echo "${left}              |                  ${right}" || true
+	if [ "${position}" = "left" ]; then
+		eval "l_pad=\$(printf '%-$((box_hw + 1))s|%-$((box_hw + 5))s')"
+	fi
+	if [ "${position}" = "right" ]; then
+		eval "r_pad=\$(printf '%-$((box_hw - 1))s|')"
+	fi
+
+	if [ "$model" = "dst" -a -z "${l_pad}" ]; then
+		# Draw connector on upper side
+		draw_connector
+	fi
+
+	# Draw box's upper line
+	draw_block_line "${l_pad}" "${r_pad}"
+	eval "
+		printf '%s| %-$((box_w - 1))s |%s\n' \"\${l_pad}\" \"\${label}\" \"\${r_pad}\"
+		printf '%s| IP:   %-$((box_w - 6))s|%s\n' \"\${l_pad}\" \${ip} \"\${r_pad}\"
+	"
+
+	if [ "$gateway" = "direct" ]; then
+		eval "printf '%s| %s:  %-$((box_w - 6))s|%s\n' \"\${l_pad}\" \"\${ADD_RES}\" \"${gateway_arp}\" \"${r_pad}\""
+	fi
+
+	# Draw box's lower line
+	draw_block_line "${l_pad}" "${r_pad}"
+
+	# Draw block lower connectors
+	# needs a simple connectors if l_pad and r_pad are empty
+	# needs dual connectors in other case
+	[ -z "${l_pad}" -a -z "${r_pad}" ] && draw_connector || draw_dual_connectors
+
 }
 
 draw_2blocks () {
@@ -160,48 +267,62 @@ draw_2blocks () {
 	# Second model family
 	local label1=$1
 	local label2=$2
-	echo "+-------------------------------+    +-------------------------------+"
-	printf '| %-29s |    | %-29s |\n' "${label1}" "${label2}"
+	draw_2blocks_line
+	eval "printf '| %-$((box_w))s|  | %-$((box_w))s|\n' \"${label1}\" \"${label2}\""
 	if echo "${label1}" | grep -q 'ROUTER'; then
-		printf '| IP:   %-21s   |    | IP:  %-21s    |\n' ${src_gateway} ${dst_gateway}
-		printf '| ARP:  %-21s   |    | ARP:  %-21s   |\n' ${src_gateway_arp} ${dst_gateway_arp}
+		eval "
+			printf '| IP:   %-$((box_w - 6))s|  | IP:   %-$((box_w - 6))s|\n' \${src_gateway} \${dst_gateway}
+			printf '| %s:  %-$((box_w - 6))s|  | %s:  %-$((box_w - 6))s|\n' \${ADD_RES} \${src_gateway_arp} \${ADD_RES} \${dst_gateway_arp}
+		"
 	else
-    	printf '| IP:   %-21s   |    | IP:  %-21s    |\n' ${src_ip} ${dst_ip}
+    		eval "printf '| IP:   %-$((box_w - 6))s|  | IP:   %-$((box_w - 6))s|\n' \${src_ip} \${dst_ip}"
 	fi
 	if [ "${src_gateway}" = "direct" ]; then
-		printf '| ARP:  %-21s   |' ${src_gateway_arp}
+		eval "printf '| %s:  %-$((box_w - 6))s|' \${ADD_RES} \${src_gateway_arp}"
 	elif [ "${dst_gateway}" = "direct" ]; then
-		printf '|                               |'
+		eval "printf '|%-$((box_w + 1))s|'"
 	fi
 	if [ "${dst_gateway}" = "direct" ]; then
-        	printf '    | ARP: %-21s    |\n' ${dst_gateway_arp}
+       		eval "printf '  | %s:  %-$((box_w - 6))s|\n' \${ADD_RES} \${dst_gateway_arp}"
 	elif [ "${src_gateway}" = "direct" ]; then
-		printf '    |                               |\n'
+		eval "printf '  | %-$((box_w))s|\n'"
 	fi
-	echo "+-------------------------------+    +-------------------------------+"
-	echo "                  |                                |"
+	draw_2blocks_line
+	draw_dual_connectors
 }
 
 draw_me () {
 	# Draw this device block
-	echo "+-------------------------------+"
-	printf '| IF:   %-21s   |\n' ${src_interface}
-	printf '| MAC:  %-21s   |\n' ${src_interface_mac}
-	printf '| IP:   %-21s   |\n' ${src_interface_ip}
-	printf '| net:  %-21s   |\n' ${src_destination}
-	[ -n "${src_mask}" ] && printf '| mask: %-21s   |\n' ${src_mask}
-	echo "|                               |"
-	echo "|          THIS ${device}          |"
+
+	# Draw box's lower line
+	draw_block_line "" ""
+	eval "
+		printf '| IF:   %-$((box_w - 6))s|\n' \${src_interface}
+		printf '| IF:   %-$((box_w - 6))s|\n' \${src_interface}
+		printf '| MAC:  %-$((box_w - 6))s|\n' \${src_interface_mac}
+		printf '| IP:   %-$((box_w - 6))s|\n' \${src_interface_ip}
+		printf '| net:  %-$((box_w - 6))s|\n' \${src_destination}
+	"
+	[ -n "${src_mask}" ] && eval "printf '| mask: %-$((box_w - 6))s|\n' \${src_mask}"
+	eval "
+		printf '|%-$((box_w + 1))s|\n'
+		printf '|%-$((box_hw - 5))s THIS %-$((box_hw + 2))s|\n' \"\" \${device}
+	"
 	if [ "${src_interface}" != "${dst_interface}" ]; then
 		# First model type, need to draw lower part
-		echo "|                               |"
-		printf '| net:  %-21s   |\n' ${dst_destination}
-		[ -n "${dst_mask}" ] && printf '| mask: %-21s   |\n' ${dst_mask}
-		printf '| IP:   %-21s   |\n' ${dst_interface_ip}
-    		printf '| MAC:  %-21s   |\n' ${dst_interface_mac}
-    		printf '| IF:   %-21s   |\n' ${dst_interface}
+		eval "
+			printf '|%-$((box_w +1))s|\n'
+			printf '| net:  %-$((box_w - 6))s|\n' \${dst_destination}
+		"
+		[ -n "${dst_mask}" ] && eval "printf '| mask: %-$((box_w - 6))s|\n' \${dst_mask}"
+		eval "
+			printf '| IP:   %-$((box_w - 6))s|\n' ${dst_interface_ip}
+    		printf '| MAC:  %-$((box_w - 6))s|\n' ${dst_interface_mac}
+    		printf '| IF:   %-$((box_w - 6))s|\n' ${dst_interface}
+		"
 	fi
-	echo "+-------------------------------+"
+	# Draw box's lower line
+	draw_block_line "" ""
 }
 
 get_bsd() {
@@ -284,6 +405,8 @@ get_bsd() {
 			*)
 				if (\${inet6}); then
 					${i}_gateway_arp=\$(ndp -n \${lookup} | tail -1 | tr -s ' ' | cut -d ' ' -f 2)
+					# When it's empty, it return the IPv6 address between ()
+					echo \${${i}_gateway_arp} | grep -q '(' && ${i}gateway_arp='empty'
 				else
 					${i}_gateway_arp=\$(arp -n \${lookup} | cut -d ' ' -f 4)
 				fi
@@ -417,6 +540,16 @@ fi
 [ "${device}" = "HOST" ] && echo "This tool is mainly designed for drawing router or firewall routing view"
 
 ### Start ASCII drawing
+if (${inet6}); then
+	ADD_RES="NDP"
+	# inet6 addresses needs large box able to contains 50 caracters
+	box_w=50
+else
+	ADD_RES="ARP"
+	# inet4 addresses only need to contains 28 caracters
+	box_w=28
+fi
+box_hw=$((box_w / 2 - 1))
 
 if [ "${src_interface}" != "${dst_interface}" ]; then
 	# First model family
@@ -433,8 +566,8 @@ else
 	# Second model family
 	draw_2blocks 'SOURCE HOST' 'DESTINATION HOST'
 	if [ "${src_gateway}" = "${dst_gateway}" ]; then
-		echo "            --+---+--------------------------------+---"
-		echo "              | "
+		draw_lan_line
+		eval "printf '%-$((box_hw + 1))s|\n'"
 		draw_block src 'ROUTER' "${src_gateway}" direct "${src_gateway_arp}" ""
 	else
 		if [ "${src_gateway}" != "direct" -a "${dst_gateway}" = "direct" ]; then
@@ -444,8 +577,8 @@ else
 		else
 			draw_2blocks 'ROUTER TOWARDS SOURCE' 'ROUTER TOWARDS DESTINATION'
 		fi
-		echo "            --+---+--------------------------------+---"
-		echo "                  |"
+		draw_lan_line
+		eval "printf '%-$((box_hw + 5))s|\n'"
 	fi
 	draw_me
 fi
