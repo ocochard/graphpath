@@ -176,8 +176,8 @@ draw_block_line () {
 	# +----------------------------+
 	# The 'me' box didn't need left & right padding
 	# because it's always put on the left side
-	local ll_pad=$1
-	local lr_pad=$2
+	local ll_pad="$1"
+	local lr_pad="$2"
 
 	printf "%s+" "${ll_pad}"
 	printf '%*s' $((box_w + 1)) ' ' | tr ' ' '-'
@@ -208,12 +208,12 @@ draw_block () {
 	# l_pad will draw a vertical line on the left side of the box
 	# r_pad will draw a vertical line on the rigth side of the box
 
-	local model=$1		# src or dst, used for drawing link on the upper or lower side
-	local label=$2		# text to display into the block
-	local ip=$3		# IP address for src & dst host (=direct for a router)
-	local gateway=$4	#  IP address for a router
-	local gateway_arp=$5	# ARP cache if directly connected to "me" block
-	local position=$6	# left for box on left size, right other
+	local model="$1"	# src or dst, used for drawing link on the upper or lower side
+	local label="$2"		# text to display into the block
+	local ip="$3"		# IP address for src & dst host (=direct for a router)
+	local gateway="$4"	#  IP address for a router
+	local gateway_arp="$5"	# ARP cache if directly connected to "me" block
+	local position="$6"	# left for box on left size, right other
 	l_pad=""		# left padding text
 	r_pad=""		# right padding text
 
@@ -261,8 +261,8 @@ draw_block () {
 draw_2blocks () {
 	# Draw two blocks on the same level
 	# Second model family
-	local label1=$1
-	local label2=$2
+	local label1="$1"
+	local label2="$2"
 	draw_2blocks_line
 	eval "printf '| %-$((box_w))s|  | %-$((box_w))s|\n' \"${label1}\" \"${label2}\""
 	if echo "${label1}" | grep -q 'ROUTER'; then
