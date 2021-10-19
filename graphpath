@@ -3,7 +3,7 @@
 # Graphpath generates an ASCII network diagram from the route table of a Unix/Linux
 # https://bsdrp.net
 #
-# Copyright (c) 2018, Olivier Cochard-Labbé (olivier@cochard.me)
+# Copyright (c) 2018-2021, Olivier Cochard-Labbé (olivier@cochard.me)
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -326,7 +326,7 @@ get_bsd() {
 	[ $(sysctl -n net.inet.ip.forwarding) -eq 0 ] && forwarding=false || forwarding=true
 	[ $(sysctl -n net.inet6.ip6.forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
 
-	(${inet6}) && family="-6" || family="-4"
+	(${inet6}) && family="-inet6" || family="-inet"
 	tmp=$(mktemp)
 	# Populate src_* and dst_* variables
 	for i in src dst; do
@@ -339,8 +339,8 @@ get_bsd() {
 
 			# call route only once
 			case \${OS} in
-                        FreeBSD)
-				route \${family} -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
+                        FreeBSD|Darwin)
+				route -n get \${family} \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"
 				;;
                         *)
 				route -n get \${${i}_ip} > \${tmp} || die \"Route towards \${${i}_ip} not found\"

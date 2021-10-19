@@ -9,10 +9,6 @@ Graphpath generates an ASCII network diagram from the route table of a Unix/Linu
 
 None: it's just a shell script using standards tools (route, arp, ifconfig on *BSD and ip on Linux).
 
-## To Do
-
-Testing IPv6 support on MacOSX
-
 ## Examples
 
 Here are some graphpath output:
