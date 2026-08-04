@@ -137,7 +137,7 @@ set -eu
 # Functions definitions
 
 # A usefull function (from: http://code.google.com/p/sh-die/)
-die() { echo -n "EXIT: " >&2; echo "$@" >&2; exit 1; }
+die() { printf 'EXIT: %s\n' "$*" >&2; exit 1; }
 
 usage() {
 	echo "Usage:"
@@ -228,7 +228,7 @@ draw_block () {
 		r_pad=$(printf '%*s|' $((box_hw - 1)))
 	fi
 
-	if [ "$model" = "dst" -a -z "${l_pad}" ]; then
+	if [ "$model" = "dst" ] && [ -z "${l_pad}" ]; then
 		# Draw connector on upper side
 		draw_connector
 	fi
@@ -251,7 +251,7 @@ draw_block () {
 	if [ "$model" = "src" ]; then
 		# needs a simple connectors if l_pad and r_pad are empty
 		# needs dual connectors in other case
-		[ -z "${l_pad}" -a -z "${r_pad}" ] && draw_connector || draw_dual_connectors
+		if [ -z "${l_pad}" ] && [ -z "${r_pad}" ]; then draw_connector; else draw_dual_connectors; fi
 	else
 		# If destination block and l_pad used, need a dual connectors
 		[ -n "${l_pad}" ] && draw_dual_connectors
@@ -323,8 +323,8 @@ draw_me () {
 get_bsd() {
 	# Extract routes data
 	# Check if router enabled
-	[ $(sysctl -n net.inet.ip.forwarding) -eq 0 ] && forwarding=false || forwarding=true
-	[ $(sysctl -n net.inet6.ip6.forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
+	[ "$(sysctl -n net.inet.ip.forwarding)" -eq 0 ] && forwarding=false || forwarding=true
+	[ "$(sysctl -n net.inet6.ip6.forwarding)" -eq 0 ] && forwarding6=false || forwarding6=true
 
 	(${inet6}) && family="-inet6" || family="-inet"
 	tmp=$(mktemp)
@@ -420,7 +420,7 @@ get_bsd() {
 			fi
 			[ \"\${${i}_gateway_arp}\" = \"no\" ] && ${i}_gateway_arp='empty' || true
 		"
-		rm ${tmp} || die "can't delete ${tmp}"
+		rm "${tmp}" || die "can't delete ${tmp}"
 	done
 }
 
@@ -430,12 +430,12 @@ get_linux () {
 	# ip route has a non consistent output: STUPID Linux !
 	# Check if router enabled
 	if [ -f /proc/sys/net/ipv4/ip_forward ]; then
-		[ $(cat /proc/sys/net/ipv4/ip_forward) -eq 0 ] && forwarding=false || forwarding=true
+		[ "$(cat /proc/sys/net/ipv4/ip_forward)" -eq 0 ] && forwarding=false || forwarding=true
 	else
 		forwarding=false
 	fi
 	if [ -f /proc/sys/net/ipv6/conf/all/forwarding ]; then
-		[ $(cat /proc/sys/net/ipv6/conf/all/forwarding) -eq  0 ] && forwarding6=false || forwarding6=true
+		[ "$(cat /proc/sys/net/ipv6/conf/all/forwarding)" -eq 0 ] && forwarding6=false || forwarding6=true
 	else
 		forwarding6=false
 	fi
@@ -471,13 +471,27 @@ get_linux () {
 				${i}_interface=\${gateway}
 				${i}_interface_ip=\$(echo \${if} | cut -d ' ' -f1)
 			elif [ \"\${via}\" = \"from\" ]; then
-				# Inet6 route
+				# Inet6 route. Two shapes, differing by field position:
+				#   via:    DST from :: via GW dev IF src S ...
+				#   direct: DST from :: dev IF proto kernel src S ...
+				# The fixed-position 'read' above cannot tell them apart,
+				# so re-scan the raw line by token name.
 				${i}_routeto=\${${i}_ip}
-				${i}_gateway=\${if}
-				# 2002:333:333::1 dev eth1 lladdr 00:12:1e:33:AA:BB router REACHABLE
-				${i}_gateway_arp=\$(ip -6 neigh show \${${i}_gateway} | cut -d ' ' -f 5)
-				${i}_interface=\$(echo \${if_ip} | cut -d ' ' -f1)
-				${i}_interface_ip=\$(echo \${if_ip} | cut -d ' ' -f3)
+				set -- \$(cat \${tmp})
+				${i}_gateway='direct'
+				while [ \$# -gt 0 ]; do
+					case \$1 in
+					via) ${i}_gateway=\$2; shift 2 ;;
+					dev) ${i}_interface=\$2; shift 2 ;;
+					*) shift ;;
+					esac
+				done
+				if [ \"\${${i}_gateway}\" != \"direct\" ]; then
+					# 2002:333:333::1 dev eth1 lladdr 00:12:... router REACHABLE
+					${i}_gateway_arp=\$(ip -6 neigh show \${${i}_gateway} | cut -d ' ' -f 5)
+				fi
+				# interface IP: first global inet6 on the exit interface
+				${i}_interface_ip=\$(ip -o -6 addr show dev \${${i}_interface} scope global | tr -s ' ' | cut -d ' ' -f 4 | cut -d '/' -f1 | head -1)
 			else
 				echo "WARNING: Not supported condition!"
 				${i}_routeto=\${via}
@@ -491,14 +505,14 @@ get_linux () {
 			# ip route show to match 192.168.229.58
 			# default via 10.253.52.126 dev eth2 onlink
 			# 192.168.229.56/29 via 192.168.237.100 dev eth1.337
-			${i}_destination=\$(ip -o \${family} route show to match \${${i}_ip} | grep \${if} | cut -d ' ' -f1)
+			${i}_destination=\$(ip -o \${family} route show to match \${${i}_ip} | grep \${${i}_interface} | cut -d ' ' -f1)
 
 			if [ \"\${${i}_gateway}\" = \"direct\" ]; then
 				${i}_gateway_arp=\$(ip neigh show \${${i}_routeto} | cut -d ' ' -f 5)
 				[ \"\${${i}_gateway_arp}\" = \"no\" ] && ${i}_gateway_arp='empty' || true
 			fi
 		"
-		rm ${tmp} || die "can't delete ${tmp}"
+		rm "${tmp}" || die "can't delete ${tmp}"
 	done
 }
 
@@ -523,7 +537,7 @@ inet6=false
 
 # Small checks
 [ "${src_ip}" = "${dst_ip}" ] && die "Same source and destination IP addresses"
-$(echo ${src_ip} | grep -q ':') && inet6=true
+echo "${src_ip}" | grep -q ':' && inet6=true
 
 OS=$(uname)
 case ${OS} in
@@ -538,7 +552,7 @@ case ${OS} in
 		;;
 esac
 
-if [ $forwarding = false -o $forwarding6 = false ]; then
+if [ "$forwarding" = false ] || [ "$forwarding6" = false ]; then
 	device="HOST  "
 fi
 
@@ -576,9 +590,9 @@ else
 		eval "printf '%-$((box_hw + 1))s|\n'"
 		draw_block src 'ROUTER' "${src_gateway}" direct "${src_gateway_arp}" ""
 	else
-		if [ "${src_gateway}" != "direct" -a "${dst_gateway}" = "direct" ]; then
+		if [ "${src_gateway}" != "direct" ] && [ "${dst_gateway}" = "direct" ]; then
 			draw_block src 'ROUTER TOWARDS SOURCE' "${src_gateway}" direct "${src_gateway_arp}" "right"
-		elif [ "${dst_gateway}" != "direct" -a "${src_gateway}" = "direct" ]; then
+		elif [ "${dst_gateway}" != "direct" ] && [ "${src_gateway}" = "direct" ]; then
 			draw_block dst 'ROUTER TOWARDS DESTINATION' "${dst_gateway}" direct "${dst_gateway_arp}" "left"
 		else
 			draw_2blocks 'ROUTER TOWARDS SOURCE' 'ROUTER TOWARDS DESTINATION'
