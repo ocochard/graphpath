@@ -462,10 +462,16 @@ get_linux () {
 			# 2607:f8b0:4004:80c::200e from :: via 2001:470:66:324::1 dev he-ipv6 src 2001:470:66:324::2 metric 1024  pref medium
 
 			read ip via gateway dev if src if_ip < \${tmp}
-			if [ \"\${via}\" = \"via\" ]; then
+			if [ \"\${ip}\" = 'local' ]; then
+				# local 127.0.0.1 dev lo src 127.0.0.1
+				# route to one of our own addresses: directly connected via lo
+				${i}_routeto=\${${i}_ip}
+				${i}_interface=\${dev}
+				${i}_interface_ip=\${src}
+			elif [ \"\${via}\" = \"via\" ]; then
 				${i}_routeto=\${${i}_ip}
 				${i}_gateway=\${gateway}
-				${i}_gateway_arp=\$(ip neigh show \${${i}_gateway} | cut -d ' ' -f 5)
+				${i}_gateway_arp=\$(ip neigh show \${${i}_gateway} | cut -d ' ' -f 5 | tail -1)
 				${i}_interface=\${if}
 				${i}_interface_ip=\$(echo \${if_ip} | cut -d ' ' -f1)
 			elif [ \"\${via}\" = \"dev\" ]; then
@@ -490,7 +496,7 @@ get_linux () {
 				done
 				if [ \"\${${i}_gateway}\" != \"direct\" ]; then
 					# 2002:333:333::1 dev eth1 lladdr 00:12:... router REACHABLE
-					${i}_gateway_arp=\$(ip -6 neigh show \${${i}_gateway} | cut -d ' ' -f 5)
+					${i}_gateway_arp=\$(ip -6 neigh show \${${i}_gateway} | cut -d ' ' -f 5 | tail -1)
 				fi
 				# interface IP: first global inet6 on the exit interface
 				${i}_interface_ip=\$(ip -o -6 addr show dev \${${i}_interface} scope global | tr -s ' ' | cut -d ' ' -f 4 | cut -d '/' -f1 | head -1)
@@ -510,7 +516,7 @@ get_linux () {
 			${i}_destination=\$(ip -o \${family} route show to match \${${i}_ip} | grep \${${i}_interface} | cut -d ' ' -f1)
 
 			if [ \"\${${i}_gateway}\" = \"direct\" ]; then
-				${i}_gateway_arp=\$(ip neigh show \${${i}_routeto} | cut -d ' ' -f 5)
+				${i}_gateway_arp=\$(ip neigh show \${${i}_routeto} | cut -d ' ' -f 5 | tail -1)
 				[ \"\${${i}_gateway_arp}\" = \"no\" ] && ${i}_gateway_arp='empty' || true
 			fi
 		"
